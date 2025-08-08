@@ -11,7 +11,7 @@
  * Start command: node index.js
  */
 
-const { Client, GatewayIntentBits, Partials, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionsBitField, ChannelType, Events, AttachmentBuilder, StringSelectMenuBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, Partials, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionsBitField, ChannelType, Events, StringSelectMenuBuilder } = require('discord.js');
 require('dotenv').config();
 
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
@@ -40,7 +40,7 @@ const client = new Client({
 
 // ====== Configuration ======
 const MEMBER_ROLE_NAME = '[・Member・]';
-const STAFF_ROLE_NAME = '[・Staff・]';
+const STAFF_ROLE_NAME = '[・Staff・]';  // Updated STAFF role name
 const TICKET_CATEGORY_NAME = 'רכישה'; // optional category name
 const TICKET_PREFIX = 'רכישה-';
 const VERIFY_BUTTON_ID = 'bm_verify';
