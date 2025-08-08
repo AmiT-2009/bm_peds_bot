@@ -11,7 +11,7 @@
  * Start command: node index.js
  */
 
-const { Client, GatewayIntentBits, Partials, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionsBitField, ChannelType, Events, AttachmentBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, Partials, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionsBitField, ChannelType, Events, StringSelectMenuBuilder } = require('discord.js');
 require('dotenv').config();
 
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
@@ -30,7 +30,7 @@ if (!CLIENT_ID) {
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMembers,   // כדי לקבל אירוע של כניסת משתמש חדש
+    GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent
   ],
@@ -47,26 +47,7 @@ const OPEN_TICKET_BUTTON_ID = 'bm_open_ticket';
 const REQUEST_CLOSE_ID = 'bm_request_close';
 const CONFIRM_CLOSE_ID = 'bm_confirm_close';
 const CANCEL_CLOSE_ID = 'bm_cancel_close';
-
-// ID של ערוץ הברוכים הבאים
-const WELCOME_CHANNEL_ID = '1403412038532726958';
 // ===========================
-
-// אירוע ברוכים הבאים
-client.on(Events.GuildMemberAdd, async member => {
-  try {
-    const channel = member.guild.channels.cache.get(WELCOME_CHANNEL_ID);
-    if (!channel) {
-      console.warn('Welcome channel not found');
-      return;
-    }
-
-    // שולח הודעה עם תיוג למשתמש החדש
-    await channel.send(`היי <@${member.id}> 👋 אהלן וברוך הבא לחנות שלנו!`);
-  } catch (error) {
-    console.error('Error sending welcome message:', error);
-  }
-});
 
 client.once(Events.ClientReady, () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
@@ -83,7 +64,6 @@ async function registerCommands() {
   const commands = [
     { name: 'verify', description: 'שלח הודעת אימות עם כפתור' },
     { name: 'ticket', description: 'שלח הודעת פתיחת טיקט' },
-    // /close kept for admin fallback; main closing is via buttons
     { name: 'close', description: 'סגור טיקט (מומלץ להשתמש בכפתורי הסגירה)' }
   ];
 
@@ -121,7 +101,6 @@ client.on(Events.InteractionCreate, async interaction => {
           .setColor(0x00FF66);
 
         if (IMAGE_URL) {
-          // use thumbnail to keep it compact
           embed.setThumbnail(IMAGE_URL);
         }
 
@@ -138,13 +117,29 @@ client.on(Events.InteractionCreate, async interaction => {
 
         const embed = new EmbedBuilder()
           .setTitle('פתיחת פנייה / טיקט')
-          .setDescription('לחץ על הכפתור למטה כדי לפתוח פנייה לצוות.')
+          .setDescription('בחר את הקטגוריה המתאימה לפנייה שלך.')
           .setColor(0x0099FF);
 
         if (IMAGE_URL) embed.setThumbnail(IMAGE_URL);
 
         const row = new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId(OPEN_TICKET_BUTTON_ID).setLabel('פתח טיקט').setStyle(ButtonStyle.Primary)
+          new StringSelectMenuBuilder()
+            .setCustomId('select_ticket_category')
+            .setPlaceholder('בחר קטגוריה')
+            .addOptions([
+              {
+                label: 'רכישה',
+                description: 'עזרה בנושא רכישה',
+                value: 'purchase',
+                emoji: '🛒'
+              },
+              {
+                label: 'שאלה',
+                description: 'שאלות כלליות',
+                value: 'question',
+                emoji: '❓'
+              }
+            ])
         );
 
         await interaction.reply({ embeds: [embed], components: [row] });
@@ -152,11 +147,10 @@ client.on(Events.InteractionCreate, async interaction => {
       }
 
       if (cmd === 'close') {
-        // fallback — do not rely on this for normal flow
         if (!interaction.channel || !interaction.channel.name.startsWith(TICKET_PREFIX)) {
           return interaction.reply({ content: 'פקודה זו זמינה רק בתוך ערוץ טיקט.', ephemeral: true });
         }
-        // require staff or admin to close
+
         const isStaff = interaction.member.roles.cache.some(r => r.name === STAFF_ROLE_NAME) || interaction.member.permissions.has(PermissionsBitField.Flags.Administrator);
         if (!isStaff) return interaction.reply({ content: 'אין לך הרשאה לסגור טיקט זה.', ephemeral: true });
 
@@ -170,7 +164,6 @@ client.on(Events.InteractionCreate, async interaction => {
     if (interaction.isButton()) {
       const id = interaction.customId;
 
-      // VERIFY button: give MEMBER role
       if (id === VERIFY_BUTTON_ID) {
         const role = interaction.guild.roles.cache.find(r => r.name === MEMBER_ROLE_NAME);
         if (!role) return interaction.reply({ content: `❌ לא נמצא רול בשם ${MEMBER_ROLE_NAME}`, ephemeral: true });
@@ -184,26 +177,21 @@ client.on(Events.InteractionCreate, async interaction => {
         }
       }
 
-      // OPEN TICKET button
       if (id === OPEN_TICKET_BUTTON_ID) {
-        // check if user already has ticket
         const safeName = `${TICKET_PREFIX}${interaction.user.username}`.slice(0, 90);
         const existing = interaction.guild.channels.cache.find(ch => ch.name === safeName);
         if (existing) return interaction.reply({ content: `כבר קיים טיקט עבורך: ${existing}`, ephemeral: true });
 
-        // find staff role and category
         const staffRole = interaction.guild.roles.cache.find(r => r.name === STAFF_ROLE_NAME);
         const category = interaction.guild.channels.cache.find(c => c.name === TICKET_CATEGORY_NAME && c.type === ChannelType.GuildCategory);
 
-        // permission overwrites
         const perms = [
-          { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] }, // everyone denied
+          { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
           { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] },
           { id: client.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] }
         ];
         if (staffRole) perms.push({ id: staffRole.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] });
 
-        // create channel
         let channel;
         try {
           channel = await interaction.guild.channels.create({
@@ -218,7 +206,6 @@ client.on(Events.InteractionCreate, async interaction => {
           return interaction.reply({ content: '❌ שגיאה ביצירת הטיקט. ודא שלבוט יש הרשאות מתאימות.', ephemeral: true });
         }
 
-        // send short message + thumbnail image + close button
         const embed = new EmbedBuilder()
           .setDescription(`<@${interaction.user.id}> תודה שפתחת טיקט 🙂 אחד מהצוות יגיע אליך בקרוב, בינתיים אנא המתן בסבלנות.`)
           .setColor(0x00AAFF);
@@ -234,12 +221,10 @@ client.on(Events.InteractionCreate, async interaction => {
         return;
       }
 
-      // REQUEST CLOSE (clicked by opener or member) -> shows confirm with two buttons
       if (id.startsWith(`${REQUEST_CLOSE_ID}::`)) {
         const parts = id.split('::');
         const openerId = parts[1];
 
-        // allow opener or members with Member role or admins to request close
         const isOpener = interaction.user.id === openerId;
         const hasMemberRole = interaction.member.roles.cache.some(r => r.name === MEMBER_ROLE_NAME);
         const isAdmin = interaction.member.permissions.has(PermissionsBitField.Flags.Administrator);
@@ -253,12 +238,10 @@ client.on(Events.InteractionCreate, async interaction => {
           new ButtonBuilder().setCustomId(`${CANCEL_CLOSE_ID}::${openerId}`).setLabel('❌ ביטול').setStyle(ButtonStyle.Secondary)
         );
 
-        // send visible message so staff sees it
         await interaction.reply({ content: 'האם אתה בטוח שברצונך לסגור את הטיקט? (רק Staff יוכל לאשר את הסגירה)', components: [confirmRow] });
         return;
       }
 
-      // CONFIRM CLOSE (only staff can press)
       if (id.startsWith(`${CONFIRM_CLOSE_ID}::`)) {
         const parts = id.split('::');
         const openerId = parts[1];
@@ -274,7 +257,6 @@ client.on(Events.InteractionCreate, async interaction => {
         return;
       }
 
-      // CANCEL CLOSE
       if (id.startsWith(`${CANCEL_CLOSE_ID}::`)) {
         await interaction.reply({ content: 'ביטול — הטיקט נשאר פתוח.', ephemeral: true });
         return;
