@@ -19,6 +19,7 @@ const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID || null; // optional for testing (register as guild command)
 const IMAGE_URL = process.env.IMAGE_URL || null;
 
+
 if (!DISCORD_TOKEN) {
   console.error('ERROR: DISCORD_TOKEN not set in environment variables.');
   process.exit(1);
