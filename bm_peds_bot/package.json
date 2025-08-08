@@ -1,12 +1,13 @@
 {
-  "name": "bm-peds-bot",
+  "name": "discord-bot",
   "version": "1.0.0",
+  "description": "Discord bot with verify and ticket system",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "discord.js": "^14.0.0",
-    "dotenv": "^16.0.0"
+    "discord.js": "^14.14.1",
+    "dotenv": "^16.3.1"
   }
 }
