@@ -19,7 +19,6 @@ const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID || null; // optional for testing (register as guild command)
 const IMAGE_URL = process.env.IMAGE_URL || null;
 
-
 if (!DISCORD_TOKEN) {
   console.error('ERROR: DISCORD_TOKEN not set in environment variables.');
   process.exit(1);
@@ -31,7 +30,7 @@ if (!CLIENT_ID) {
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildMembers,   // כדי לקבל אירוע של כניסת משתמש חדש
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent
   ],
@@ -48,7 +47,26 @@ const OPEN_TICKET_BUTTON_ID = 'bm_open_ticket';
 const REQUEST_CLOSE_ID = 'bm_request_close';
 const CONFIRM_CLOSE_ID = 'bm_confirm_close';
 const CANCEL_CLOSE_ID = 'bm_cancel_close';
+
+// ID של ערוץ הברוכים הבאים
+const WELCOME_CHANNEL_ID = '1403412038532726958';
 // ===========================
+
+// אירוע ברוכים הבאים
+client.on(Events.GuildMemberAdd, async member => {
+  try {
+    const channel = member.guild.channels.cache.get(WELCOME_CHANNEL_ID);
+    if (!channel) {
+      console.warn('Welcome channel not found');
+      return;
+    }
+
+    // שולח הודעה עם תיוג למשתמש החדש
+    await channel.send(`היי <@${member.id}> 👋 אהלן וברוך הבא לחנות שלנו!`);
+  } catch (error) {
+    console.error('Error sending welcome message:', error);
+  }
+});
 
 client.once(Events.ClientReady, () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
