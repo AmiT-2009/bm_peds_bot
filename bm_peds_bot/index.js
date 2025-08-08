@@ -1,62 +1,106 @@
-const { Client, GatewayIntentBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, PermissionFlagsBits, Events } = require('discord.js');
+const { Client, GatewayIntentBits, Partials, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionsBitField, Events } = require('discord.js');
 require('dotenv').config();
 
 const client = new Client({
-    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMembers,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent
+    ],
+    partials: [Partials.Channel]
 });
 
 const MEMBER_ROLE = '[・Member・]';
 const STAFF_ROLE = '[・Staff・]';
-const CATEGORY_NAME = 'רכישה';
+const TICKET_CATEGORY_NAME = 'Tickets';
 
-client.once('ready', () => {
-    console.log(`✅ Logged in as ${client.user.tag}`);
+// כשמתחברים
+client.once(Events.ClientReady, () => {
+    console.log(`✅ הבוט מחובר בתור ${client.user.tag}`);
 });
 
+// כשמישהו לוחץ על כפתור
 client.on(Events.InteractionCreate, async interaction => {
     if (!interaction.isButton()) return;
 
-    if (interaction.customId === 'verify') {
-        let role = interaction.guild.roles.cache.find(r => r.name === MEMBER_ROLE);
-        if (!role) {
-            role = await interaction.guild.roles.create({ name: MEMBER_ROLE });
-        }
+    // כפתור ווריפיי
+    if (interaction.customId === 'verify_button') {
+        const role = interaction.guild.roles.cache.find(r => r.name === MEMBER_ROLE);
+        if (!role) return interaction.reply({ content: '❌ רול [・Member・] לא נמצא.', ephemeral: true });
+
         await interaction.member.roles.add(role);
-        return interaction.reply({ content: `קיבלת את הרול ${MEMBER_ROLE}`, ephemeral: true });
+        return interaction.reply({ content: '✅ אומתת בהצלחה!', ephemeral: true });
     }
 
-    if (interaction.customId === 'ticket') {
-        let category = interaction.guild.channels.cache.find(c => c.type === ChannelType.GuildCategory && c.name === CATEGORY_NAME);
-        if (!category) {
-            category = await interaction.guild.channels.create({ name: CATEGORY_NAME, type: ChannelType.GuildCategory });
-        }
+    // כפתור פתיחת טיקט
+    if (interaction.customId === 'open_ticket') {
+        const category = interaction.guild.channels.cache.find(c => c.name === TICKET_CATEGORY_NAME && c.type === 4);
 
-        const ticketChannel = await interaction.guild.channels.create({
-            name: `ticket-${interaction.user.username}`,
-            type: ChannelType.GuildText,
-            parent: category.id,
+        const channel = await interaction.guild.channels.create({
+            name: `רכישה-${interaction.user.username}`,
+            type: 0,
+            parent: category ? category.id : null,
             permissionOverwrites: [
-                { id: interaction.guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
-                { id: interaction.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
-                { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
-                { id: interaction.guild.roles.cache.find(r => r.name === STAFF_ROLE)?.id || '', allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }
+                { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+                { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] },
+                { id: interaction.guild.roles.cache.find(r => r.name === STAFF_ROLE)?.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }
             ]
         });
 
-        return interaction.reply({ content: `נפתח לך טיקט: ${ticketChannel}`, ephemeral: true });
+        await channel.send(`📩 שלום ${interaction.user}, צוות הסטאף יהיה איתך בקרוב.\nלהגשת בקשה לסגירה השתמש בפקודה: \`/close\``);
+        return interaction.reply({ content: `✅ טיקט נפתח: ${channel}`, ephemeral: true });
     }
 });
 
+// פקודת /close
 client.on(Events.MessageCreate, async message => {
-    if (message.content === '!setup') {
-        if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) return;
-
-        const verifyBtn = new ButtonBuilder().setCustomId('verify').setLabel('✅ Verify').setStyle(ButtonStyle.Success);
-        const ticketBtn = new ButtonBuilder().setCustomId('ticket').setLabel('📩 פתיחת טיקט').setStyle(ButtonStyle.Primary);
-
-        await message.channel.send({ content: 'לחץ כאן לקבלת רול:', components: [new ActionRowBuilder().addComponents(verifyBtn)] });
-        await message.channel.send({ content: 'לחץ כאן לפתיחת טיקט:', components: [new ActionRowBuilder().addComponents(ticketBtn)] });
+    if (message.content === '/close') {
+        if (!message.channel.name.startsWith('רכישה-')) return;
+        await message.channel.delete();
     }
 });
 
-client.login(process.env.BOT_TOKEN);
+// פקודת שליחה של הודעת Verify + כפתור
+client.on(Events.MessageCreate, async message => {
+    if (message.content === '!verifymsg') {
+        if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) return;
+
+        const embed = new EmbedBuilder()
+            .setTitle('אימות משתמשים')
+            .setDescription('לחץ על הכפתור למטה כדי לקבל גישה לשרת.')
+            .setColor(0x00ff00);
+
+        const button = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId('verify_button')
+                .setLabel('אמת אותי')
+                .setStyle(ButtonStyle.Success)
+        );
+
+        await message.channel.send({ embeds: [embed], components: [button] });
+    }
+});
+
+// פקודת שליחה של הודעת Open Ticket
+client.on(Events.MessageCreate, async message => {
+    if (message.content === '!ticketmsg') {
+        if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) return;
+
+        const embed = new EmbedBuilder()
+            .setTitle('פתיחת טיקט')
+            .setDescription('לחץ על הכפתור למטה כדי לפתוח טיקט עם צוות הסטאף.')
+            .setColor(0x0099ff);
+
+        const button = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId('open_ticket')
+                .setLabel('פתח טיקט')
+                .setStyle(ButtonStyle.Primary)
+        );
+
+        await message.channel.send({ embeds: [embed], components: [button] });
+    }
+});
+
+client.login(process.env.DISCORD_TOKEN);
