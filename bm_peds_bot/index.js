@@ -1,13 +1,28 @@
-// הקוד הסופי של הבוט
+/**
+ * B&M PEDS — Complete Discord Bot (Guild-Specific)
+ * Final Version with Logging & Corrected Two-Step Tickets
+ * Requires: discord.js v14, @discordjs/rest, discord-api-types, dotenv
+ *
+ * Environment variables to set in Render:
+ *   DISCORD_TOKEN  -> Bot token (Required)
+ *   CLIENT_ID      -> Application (client) id (Required)
+ *   IMAGE_URL      -> Raw URL to a thumbnail image (Optional)
+ *
+ * Start command: node index.js
+ */
+
 const { Client, GatewayIntentBits, Partials, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionsBitField, ChannelType, Events, StringSelectMenuBuilder } = require('discord.js');
 require('dotenv').config();
 
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
+const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = '1403412038524342413';
 const IMAGE_URL = process.env.IMAGE_URL || null;
+// --- הוספת ID ערוץ הלוגים ---
+const LOG_CHANNEL_ID = '1403412038914539629';
 
-if (!DISCORD_TOKEN || !GUILD_ID) {
-  console.error('ERROR: Missing DISCORD_TOKEN or GUILD_ID.');
+if (!DISCORD_TOKEN || !CLIENT_ID || !GUILD_ID) {
+  console.error('ERROR: Missing required environment variables or Guild ID.');
   process.exit(1);
 }
 
@@ -16,16 +31,38 @@ const client = new Client({
   partials: [Partials.Channel]
 });
 
+// ====== Configuration ======
 const MEMBER_ROLE_NAME = '[・Member・]';
 const STAFF_ROLE_NAME = '[・Staff・]';
 const PURCHASE_CATEGORY_NAME = 'רכישה';
 const QUESTION_CATEGORY_NAME = 'שאלה';
 
 const VERIFY_BUTTON_ID = 'bm_verify';
+// --- שינוי המערכת לכפתור ואז תפריט ---
+const OPEN_TICKET_PROMPT_BUTTON_ID = 'bm_open_ticket_prompt';
 const OPEN_TICKET_MENU_ID = 'category_select';
+
 const REQUEST_CLOSE_ID = 'bm_request_close';
 const CONFIRM_CLOSE_ID = 'bm_confirm_close';
 const CANCEL_CLOSE_ID = 'bm_cancel_close';
+// ===========================
+
+// פונקציית עזר לשליחת לוגים
+async function logAction(message) {
+    if (!LOG_CHANNEL_ID) return;
+    try {
+        const logChannel = await client.channels.fetch(LOG_CHANNEL_ID);
+        if (logChannel && logChannel.isTextBased()) {
+            const embed = new EmbedBuilder()
+                .setDescription(message)
+                .setColor(0x5865F2)
+                .setTimestamp();
+            await logChannel.send({ embeds: [embed] });
+        }
+    } catch (error) {
+        console.error(`Failed to send log message:`, error);
+    }
+}
 
 client.once(Events.ClientReady, () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
@@ -35,11 +72,10 @@ client.on(Events.InteractionCreate, async interaction => {
   if (!interaction.inGuild() || interaction.guildId !== GUILD_ID) return;
 
   try {
+    // Slash command handling
     if (interaction.isChatInputCommand()) {
       const isStaff = interaction.member.roles.cache.some(r => r.name === STAFF_ROLE_NAME);
-      if (!isStaff) {
-        return interaction.reply({ content: 'רק חברי צוות עם רול [・Staff・] יכולים להשתמש בפקודה זו.', ephemeral: true });
-      }
+      if (!isStaff) return interaction.reply({ content: 'רק חברי צוות עם רול [・Staff・] יכולים להשתמש בפקודה זו.', ephemeral: true });
 
       if (interaction.commandName === 'verify') {
         const embed = new EmbedBuilder().setTitle('אימות משתמשים').setDescription('לחץ על הכפתור למטה כדי לקבל גישה לשרת.').setColor(0x00FF66);
@@ -50,14 +86,10 @@ client.on(Events.InteractionCreate, async interaction => {
       }
 
       if (interaction.commandName === 'ticket') {
-        const embed = new EmbedBuilder().setTitle('פתיחת פנייה / טיקט').setDescription('בחר את הקטגוריה של הטיקט שלך למטה').setColor(0x0099FF);
+        const embed = new EmbedBuilder().setTitle('מערכת הטיקטים').setDescription('לחץ על הכפתור למטה כדי לפתוח פנייה לצוות.').setColor(0x0099FF);
         if (IMAGE_URL) embed.setThumbnail(IMAGE_URL);
         const row = new ActionRowBuilder().addComponents(
-          new StringSelectMenuBuilder().setCustomId(OPEN_TICKET_MENU_ID).setPlaceholder('בחר קטגוריה')
-            .addOptions(
-              { label: 'רכישה', value: 'רכישה', description: 'טיקט הקשור לרכישה', emoji: '🛒' },
-              { label: 'שאלה', value: 'שאלה', description: 'טיקט הקשור לשאלה', emoji: '❓' }
-            )
+          new ButtonBuilder().setCustomId(OPEN_TICKET_PROMPT_BUTTON_ID).setLabel('פתח טיקט').setStyle(ButtonStyle.Success).setEmoji('🎟️')
         );
         await interaction.reply({ content: '✅ ההודעה לפתיחת טיקטים נשלחה.', ephemeral: true });
         await interaction.channel.send({ embeds: [embed], components: [row] });
@@ -74,38 +106,60 @@ client.on(Events.InteractionCreate, async interaction => {
 
     if (interaction.isStringSelectMenu()) {
       if (interaction.customId === OPEN_TICKET_MENU_ID) {
+        const selectedCategoryValue = interaction.values[0];
         const isStaffMember = interaction.member.roles.cache.some(r => r.name === STAFF_ROLE_NAME);
-        if (!isStaffMember) {
-          const existing = interaction.guild.channels.cache.find(ch => ch.topic === `ticket-opener:${interaction.user.id}`);
-          if (existing) return interaction.reply({ content: `כבר קיים טיקט פתוח עבורך: ${existing}. רק חברי צוות יכולים לפתוח מספר טיקטים.`, ephemeral: true });
-        }
 
-        const selectedValue = interaction.values[0];
-        const channelName = `${selectedValue}-${interaction.user.username.toLowerCase()}`.slice(0, 90);
-        const parentName = selectedValue === 'רכישה' ? PURCHASE_CATEGORY_NAME : QUESTION_CATEGORY_NAME;
+        if (!isStaffMember) {
+            const existing = interaction.guild.channels.cache.find(ch => 
+                ch.topic === `ticket-opener:${interaction.user.id}` && ch.name.startsWith(`${selectedCategoryValue}-`)
+            );
+            if (existing) {
+                return interaction.reply({ content: `כבר קיים לך טיקט פתוח בקטגוריית **${selectedCategoryValue}**: ${existing}.`, ephemeral: true });
+            }
+        }
+        
+        const channelName = `${selectedCategoryValue}-${interaction.user.username.toLowerCase()}`.slice(0, 90);
+        const parentName = selectedCategoryValue === 'רכישה' ? PURCHASE_CATEGORY_NAME : QUESTION_CATEGORY_NAME;
         const parentCategory = interaction.guild.channels.cache.find(c => c.name === parentName && c.type === ChannelType.GuildCategory);
         const staffRole = interaction.guild.roles.cache.find(r => r.name === STAFF_ROLE_NAME);
-
+        
         const perms = [
           { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
           { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] },
           { id: client.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] }
         ];
         if (staffRole) perms.push({ id: staffRole.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] });
-
+        
         const channel = await interaction.guild.channels.create({ name: channelName, type: ChannelType.GuildText, parent: parentCategory?.id, permissionOverwrites: perms, topic: `ticket-opener:${interaction.user.id}` });
         const embed = new EmbedBuilder().setDescription(`<@${interaction.user.id}> תודה שפתחת טיקט 🙂 אחד מהצוות יגיע אליך בקרוב.`).setColor(0x00AAFF);
         if (IMAGE_URL) embed.setThumbnail(IMAGE_URL);
         const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`${REQUEST_CLOSE_ID}::${interaction.user.id}`).setLabel('🔒 בקשת סגירה').setStyle(ButtonStyle.Danger));
-
+        
         await channel.send({ content: `<@${interaction.user.id}>`, embeds: [embed], components: [row] });
-        await interaction.reply({ content: `✅ טיקט נפתח: ${channel}`, ephemeral: true });
+        
+        // --- זה התיקון הקריטי! ---
+        // מעדכנים את ההודעה הנסתרת ומסירים ממנה את התפריט
+        await interaction.update({ content: `✅ טיקט נפתח בהצלחה: ${channel}`, components: [] });
+        
+        await logAction(`🎟️ **טיקט נפתח**\n> **פותח:** ${interaction.user} (${interaction.user.id})\n> **סוג:** ${selectedCategoryValue}\n> **ערוץ:** ${channel}`);
       }
     }
 
     if (interaction.isButton()) {
       const isStaff = interaction.member.roles.cache.some(r => r.name === STAFF_ROLE_NAME);
       const [customId, openerId] = interaction.customId.split('::');
+
+      if (customId === OPEN_TICKET_PROMPT_BUTTON_ID) {
+          const menu = new StringSelectMenuBuilder()
+              .setCustomId(OPEN_TICKET_MENU_ID)
+              .setPlaceholder('בחר את נושא הפנייה...')
+              .addOptions(
+                  { label: 'רכישה', value: 'רכישה', description: 'פתיחת טיקט בנושא רכישות.', emoji: '🛒' },
+                  { label: 'שאלה', value: 'שאלה', description: 'פתיחת טיקט בנושא שאלות כלליות.', emoji: '❓' }
+              );
+          const row = new ActionRowBuilder().addComponents(menu);
+          return interaction.reply({ content: 'באיזה נושא תרצה לפתוח טיקט?', components: [row], ephemeral: true });
+      }
 
       if (customId === VERIFY_BUTTON_ID) {
         const role = interaction.guild.roles.cache.find(r => r.name === MEMBER_ROLE_NAME);
@@ -128,8 +182,12 @@ client.on(Events.InteractionCreate, async interaction => {
 
       if (customId === CONFIRM_CLOSE_ID) {
         if (!isStaff) return interaction.reply({ content: 'רק חבר צוות עם רול [・Staff・] יכול לאשר סגירה זו.', ephemeral: true });
+        
+        const ticketChannel = interaction.channel;
         await interaction.reply({ content: '✅ מאשר סגירה... הטיקט יימחק בעוד מספר שניות.' });
-        setTimeout(() => interaction.channel.delete('Closed by staff').catch(console.error), 3000);
+        await logAction(`🔒 **טיקט נסגר**\n> **סוגר:** ${interaction.user} (${interaction.user.id})\n> **ערוץ:** \`${ticketChannel.name}\``);
+        
+        setTimeout(() => ticketChannel.delete('Closed by staff').catch(console.error), 3000);
       }
 
       if (customId === CANCEL_CLOSE_ID) {
