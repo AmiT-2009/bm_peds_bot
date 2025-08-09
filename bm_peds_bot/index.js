@@ -1,11 +1,12 @@
 /**
  * B&M PEDS — Complete Discord Bot (Guild-Specific)
+ * Final Version for Render Deployment
  * Requires: discord.js v14, @discordjs/rest, discord-api-types, dotenv
  *
- * Environment variables required:
- *   DISCORD_TOKEN  -> Bot token
- *   CLIENT_ID      -> Application (client) id
- *   IMAGE_URL      -> Raw URL to BENJO image (thumbnail)
+ * Environment variables to set in Render:
+ *   DISCORD_TOKEN  -> Bot token (Required)
+ *   CLIENT_ID      -> Application (client) id (Required)
+ *   IMAGE_URL      -> Raw URL to a thumbnail image (Optional)
  *
  * Start command: node index.js
  */
@@ -44,7 +45,7 @@ const client = new Client({
 // ====== Configuration ======
 const MEMBER_ROLE_NAME = '[・Member・]';
 const STAFF_ROLE_NAME = '[・Staff・]';
-// *** חשוב: ודא שיצרת בשרת קטגוריות בשמות אלו בדיוק ***
+// *** חשוב: ודא שיצרת בשרת קטגוריות פרטיות בשמות אלו בדיוק ***
 const PURCHASE_CATEGORY_NAME = 'רכישה'; // Parent category for purchase tickets
 const QUESTION_CATEGORY_NAME = 'שאלה';   // Parent category for question tickets
 
@@ -145,7 +146,7 @@ client.on(Events.InteractionCreate, async interaction => {
       if (interaction.customId === OPEN_TICKET_MENU_ID) {
         const isStaff = interaction.member.roles.cache.some(r => r.name === STAFF_ROLE_NAME);
 
-        // --- הוספת לוגיקה לבדיקת טיקט קיים (אלא אם המשתמש הוא איש צוות) ---
+        // --- Check for existing ticket unless the user is staff ---
         if (!isStaff) {
             const existing = interaction.guild.channels.cache.find(ch => ch.topic === `ticket-opener:${interaction.user.id}`);
             if (existing) {
@@ -156,7 +157,7 @@ client.on(Events.InteractionCreate, async interaction => {
         const selectedCategoryValue = interaction.values[0]; // 'רכישה' or 'שאלה'
         const channelName = `${selectedCategoryValue}-${interaction.user.username.toLowerCase()}`.slice(0, 90);
 
-        // --- קביעת קטגוריית האב הנכונה על סמך הבחירה ---
+        // --- Determine the correct parent category based on selection ---
         let parentCategoryName;
         if (selectedCategoryValue === 'רכישה') {
             parentCategoryName = PURCHASE_CATEGORY_NAME;
