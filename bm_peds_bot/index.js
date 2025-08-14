@@ -332,7 +332,7 @@ client.on(Events.InteractionCreate, async interaction => {
 client.login(DISCORD_TOKEN);```
 
 ---
-### `# deploy-commands.js (קוד נקי בלבד)`
+/* ### ✈ deploy-commands.js (יד רק לבד) */
 ```javascript
 const { REST } = require('@discordjs/rest');
 const { Routes } = require('discord-api-types/v10');
