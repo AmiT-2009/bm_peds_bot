@@ -1,60 +1,64 @@
-// deploy-commands.js
-
 const { REST } = require('@discordjs/rest');
 const { Routes } = require('discord-api-types/v10');
-const { PermissionsBitField } = require('discord.js');
-require('dotenv').config(); // כדי לקרוא את המשתנים מ-.env
+const { SlashCommandBuilder } = require('discord.js');
+require('dotenv').config();
 
-// ודא שהמשתנים האלה קיימים ב-.env
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
-const GUILD_ID = '1403412038524342413'; // ה-ID של השרת שלך
-
-if (!DISCORD_TOKEN || !CLIENT_ID || !GUILD_ID) {
-    console.error('ERROR: Missing required environment variables (TOKEN, CLIENT_ID) or Guild ID.');
-    process.exit(1);
-}
+const GUILD_ID = '1403412038524342413';
 
 const commands = [
-    {
-        name: 'startgiveaway',
-        description: 'מתחיל הגרלה חדשה.',
-        default_member_permissions: PermissionsBitField.Flags.ManageGuild.toString(), // רק לצוות
-        options: [
-            { name: 'duration', type: 3, description: 'משך ההגרלה (לדוגמה: 1h, 30m, 2d).', required: true },
-            { name: 'winners', type: 4, description: 'מספר הזוכים.', required: true },
-            { name: 'prize', type: 3, description: 'הפרס בהגרלה.', required: true },
-            { name: 'requirements', type: 3, description: 'הדרישות להשתתפות (אופציונלי).', required: false },
-        ],
-    },
-    {
-        name: 'invites',
-        description: 'מציג את סטטיסטיקת ההזמנות שלך או של משתמש אחר.',
-        options: [
-            { name: 'user', type: 6, description: 'המשתמש שברצונך לבדוק (אופציונלי).', required: false },
-        ],
-    },
-    {
-        name: 'verify',
-        description: 'יוצר את הודעת האימות עם כפתור בחדר הנוכחי.',
-        default_member_permissions: PermissionsBitField.Flags.ManageGuild.toString(), // רק לצוות
-    },
-    {
-        name: 'ticket',
-        description: 'יוצר את ההודעה לפתיחת טיקט בחדר הנוכחי.',
-        default_member_permissions: PermissionsBitField.Flags.ManageGuild.toString(), // רק לצוות
-    },
-    {
-        name: 'close',
-        description: 'סוגר את הטיקט הנוכחי (לשימוש בתוך ערוץ טיקט).',
-        default_member_permissions: PermissionsBitField.Flags.ManageMessages.toString(), // רק לצוות
-    }
-];
+    new SlashCommandBuilder().setName('verify').setDescription('שולח את הודעת האימות לערוץ.'),
+    new SlashCommandBuilder().setName('ticket').setDescription('שולח את ההודעה לפתיחת טיקטים.'),
+    new SlashCommandBuilder().setName('close').setDescription('סוגר את הטיקט הנוכחי.'),
+    new SlashCommandBuilder().setName('startgiveaway')
+        .setDescription('מתחיל הגרלה חדשה.')
+        .addStringOption(option =>
+            option.setName('duration')
+            .setDescription('משך ההגרלה (לדוגמה: 1d, 12h, 30m, 5s).')
+            .setRequired(true))
+        .addIntegerOption(option =>
+            option.setName('winners')
+            .setDescription('מספר הזוכים.')
+            .setRequired(true))
+        .addStringOption(option =>
+            option.setName('prize')
+            .setDescription('הפרס בהגרלה.')
+            .setRequired(true))
+        .addStringOption(option =>
+            option.setName('requirements')
+            .setDescription('דרישות להשתתפות (אופציונלי).')
+            .setRequired(false)),
+    new SlashCommandBuilder().setName('invites')
+        .setDescription('מציג את סטטיסטיקת ההזמנות של משתמש.')
+        .addUserOption(option =>
+            option.setName('user')
+            .setDescription('המשתמש לבדיקה (ברירת מחדל: אתה).')
+            .setRequired(false)),
+    new SlashCommandBuilder().setName('add')
+        .setDescription('מוסיף משתמש לטיקט (לצוות בלבד).')
+        .addUserOption(option =>
+            option.setName('user')
+            .setDescription('המשתמש להוספה לטיקט.')
+            .setRequired(true)),
+    new SlashCommandBuilder().setName('remove')
+        .setDescription('מסיר משתמש מטיקט (לצוות בלבד).')
+        .addUserOption(option =>
+            option.setName('user')
+            .setDescription('המשתמש להסרה מהטיקט.')
+            .setRequired(true))
+].map(command => command.toJSON());
 
 const rest = new REST({ version: '10' }).setToken(DISCORD_TOKEN);
 
-console.log('[COMMANDS] Started refreshing application (/) commands.');
-
-rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: commands })
-    .then(data => console.log(`[COMMANDS] Successfully reloaded ${data.length} application (/) commands.`))
-    .catch(error => console.error(error));
+(async () => {
+    try {
+        console.log(`Started refreshing ${commands.length} application (/) commands.`);
+        const data = await rest.put(
+            Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: commands },
+        );
+        console.log(`Successfully reloaded ${data.length} application (/) commands.`);
+    } catch (error) {
+        console.error("An error occurred while deploying commands:", error);
+    }
+})();
