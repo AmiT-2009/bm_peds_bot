@@ -1,0 +1,20 @@
+{
+  "name": "bm-peds-discord-bot",
+  "version": "1.0.0",
+  "description": "A complete Discord bot for the B&M PEDS server.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "deploy": "node deploy-commands.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@discordjs/rest": "^2.3.0",
+    "discord-api-types": "^0.37.92",
+    "discord-html-transcripts": "^3.2.0",
+    "discord.js": "^14.15.3",
+    "dotenv": "^16.4.5"
+  }
+}
